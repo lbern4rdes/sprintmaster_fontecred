@@ -179,7 +179,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     pullData(); 
-    const pollInterval = setInterval(pullData, 60000); // Check every 60s to reduce traffic
+    const pollInterval = setInterval(pullData, 15000); // Check every 15s to reduce traffic
     return () => clearInterval(pollInterval);
   }, [state.config.gasUrl]); 
 
