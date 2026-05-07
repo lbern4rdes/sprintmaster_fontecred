@@ -16,5 +16,5 @@ export const DEFAULT_CONFIG: Config = {
   pointsQueueJump: 1,
   pointsReqFailure: 1,
   bonusEarly: 2,
-  gasUrl: '',
+  gasUrl: 'https://script.google.com/macros/s/AKfycbxpHzxf06MFsAX1U5uuJ5RYAgdo28YCMsn2yPnntnyvYXqY_FSQSoDU2cxKK07nw9owzg/exec',
 };

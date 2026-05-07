@@ -108,6 +108,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    // Se a URL estiver vazia e tivermos uma padrão no código, usa a padrão
+    if (DEFAULT_CONFIG.gasUrl && (!initialState.config.gasUrl || initialState.config.gasUrl === '')) {
+      initialState.config.gasUrl = DEFAULT_CONFIG.gasUrl;
+    }
+
     // Migration/Safety checks
     if (initialState.cards) {
       initialState.cards = initialState.cards.map((c: any, index: number) => ({
