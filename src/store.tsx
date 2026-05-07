@@ -57,6 +57,7 @@ interface AppContextType extends AppState {
   deleteUser: (id: string) => void;
 
   calculateResults: () => ResultRow[];
+  isInitialPulling: boolean;
 }
 
 const DEFAULT_ADMIN: User = {
@@ -133,6 +134,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const isInitialMount = useRef<boolean>(true);
   const initialPullAttempted = useRef<boolean>(false);
   const isFromPull = useRef<boolean>(false);
+  const [isInitialPulling, setIsInitialPulling] = useState(true);
 
   useEffect(() => {
     // 1. Always save the config to a dedicated key so the URL is never lost
@@ -199,24 +201,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const data = await res.json();
           initialPullAttempted.current = true;
 
-          if (data && data.config) {
+          if (data && typeof data === 'object') {
             const currentState = stateRef.current;
             const isLocalEmpty = currentState.devs.length === 0 && currentState.sprints.length === 0 && currentState.cards.length === 0;
-            const isRemoteEmpty = !data.devs || (data.devs.length === 0 && data.cards.length === 0);
+            
+            // Verificação mais flexível da estrutura remota
+            const remoteDevs = data.devs || [];
+            const remoteCards = data.cards || [];
+            const isRemoteEmpty = remoteDevs.length === 0 && remoteCards.length === 0;
 
             if (!isRemoteEmpty || isLocalEmpty) {
-              if (JSON.stringify(data) !== JSON.stringify(currentState)) {
-                if (!data.users.some((u: User) => u.id === DEFAULT_ADMIN.id)) {
-                  data.users = [DEFAULT_ADMIN, ...data.users];
-                }
+              const remoteUsers = data.users || [];
+              const hasAdmin = remoteUsers.some((u: User) => u.id === DEFAULT_ADMIN.id);
+              
+              const updatedData = {
+                ...currentState,
+                ...data,
+                users: hasAdmin ? remoteUsers : [DEFAULT_ADMIN, ...remoteUsers]
+              };
+
+              if (JSON.stringify(updatedData) !== JSON.stringify(currentState)) {
                 isFromPull.current = true;
-                setState(data);
+                setState(updatedData);
               }
             }
           }
+          setIsInitialPulling(false);
         } catch (e) {
           console.error('GAS Pull Failed', e);
-          initialPullAttempted.current = true; // Mesmo com erro, consideramos que tentamos
+          initialPullAttempted.current = true;
+          setIsInitialPulling(false);
         }
       }
     }
@@ -419,7 +433,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       deleteQA,
       deleteExtra,
       deleteUser,
-      calculateResults
+      calculateResults,
+      isInitialPulling
     }}>
       {children}
     </AppContext.Provider>
