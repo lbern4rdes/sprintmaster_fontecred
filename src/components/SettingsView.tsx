@@ -17,47 +17,127 @@ export function SettingsView() {
 
   const gasBoilerplate = `
 /**
- * SprintMaster - Smart Sync Script
+ * SprintMaster - Pro Database Sync Script v2.0
+ * Este script transforma as abas da planilha no Banco de Dados Real.
  */
 
-const DB_SHEET_NAME = "CONFIG_RAW_DATA";
+const SHEETS = {
+  CONFIG: "DB_CONFIG",
+  SPRINTS: "DB_SPRINTS",
+  DEVS: "DB_DEVS",
+  CARDS: "DB_CARDS",
+  QA: "DB_QA",
+  EXTRAS: "DB_EXTRAS",
+  USERS: "DB_USERS"
+};
 
 function doGet(e) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(DB_SHEET_NAME) || ss.insertSheet(DB_SHEET_NAME);
-  const data = sheet.getRange(1, 1).getValue();
-  return ContentService.createTextOutput(data || "{}")
+  const data = {
+    config: readConfig(ss),
+    sprints: readSheet(ss, SHEETS.SPRINTS),
+    devs: readSheet(ss, SHEETS.DEVS),
+    cards: readSheet(ss, SHEETS.CARDS),
+    qa: readSheet(ss, SHEETS.QA),
+    extras: readSheet(ss, SHEETS.EXTRAS),
+    users: readSheet(ss, SHEETS.USERS)
+  };
+  
+  // Se não houver usuários, garante pelo menos o admin padrão
+  if (data.users.length === 0) {
+    data.users = [{
+      id: "admin_root",
+      name: "Administrador Fontecred",
+      email: "admin@fontecred.com.br",
+      password: "12345678",
+      role: "Administrador",
+      active: true
+    }];
+  }
+
+  return ContentService.createTextOutput(JSON.stringify(data))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
 function doPost(e) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const data = JSON.parse(e.postData.contents);
-  
-  // 1. Save raw JSON for app recovery
-  const dbSheet = ss.getSheetByName(DB_SHEET_NAME) || ss.insertSheet(DB_SHEET_NAME);
-  dbSheet.getRange(1, 1).setValue(e.postData.contents);
-  
-  // 2. Distribute to human-readable sheets
-  updateHumanSheet(ss, "DB_DEVS", ["id", "name", "active"], data.devs);
-  updateHumanSheet(ss, "DB_SPRINTS", ["id", "name", "startDate", "endDate", "active"], data.sprints);
-  updateHumanSheet(ss, "DB_CARDS", ["id", "code", "title", "status", "basePoints", "devId", "sprintId"], data.cards);
-  updateHumanSheet(ss, "DB_USERS", ["id", "name", "email", "role", "active"], data.users);
-  
-  return ContentService.createTextOutput("Sync Success")
-    .setMimeType(ContentService.MimeType.TEXT);
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const data = JSON.parse(e.postData.contents);
+    
+    // Salva cada entidade em sua respectiva aba
+    if (data.config) writeConfig(ss, data.config);
+    if (data.sprints) writeSheet(ss, SHEETS.SPRINTS, data.sprints);
+    if (data.devs) writeSheet(ss, SHEETS.DEVS, data.devs);
+    if (data.cards) writeSheet(ss, SHEETS.CARDS, data.cards);
+    if (data.qa) writeSheet(ss, SHEETS.QA, data.qa);
+    if (data.extras) writeSheet(ss, SHEETS.EXTRAS, data.extras);
+    if (data.users) writeSheet(ss, SHEETS.USERS, data.users);
+    
+    return ContentService.createTextOutput("Sync Success").setMimeType(ContentService.MimeType.TEXT);
+  } catch (err) {
+    return ContentService.createTextOutput("Error: " + err.message).setMimeType(ContentService.MimeType.TEXT);
+  }
 }
 
-function updateHumanSheet(ss, name, headers, items) {
-  let sheet = ss.getSheetByName(name) || ss.insertSheet(name);
+// --- Funções Auxiliares de Leitura ---
+
+function readSheet(ss, sheetName) {
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet) return [];
+  const values = sheet.getDataRange().getValues();
+  if (values.length < 2) return [];
+  
+  const headers = values[0];
+  return values.slice(1).map(row => {
+    let obj = {};
+    headers.forEach((h, i) => {
+      let val = row[i];
+      // Converte strings de booleanos/números se necessário
+      if (val === "true") val = true;
+      if (val === "false") val = false;
+      obj[h] = val;
+    });
+    return obj;
+  });
+}
+
+function readConfig(ss) {
+  const sheet = ss.getSheetByName(SHEETS.CONFIG);
+  if (!sheet) return {};
+  const values = sheet.getDataRange().getValues();
+  let config = {};
+  values.forEach(row => {
+    if (row[0]) config[row[0]] = row[1];
+  });
+  return config;
+}
+
+// --- Funções Auxiliares de Escrita ---
+
+function writeSheet(ss, sheetName, items) {
+  if (!items || items.length === 0) return;
+  let sheet = ss.getSheetByName(sheetName) || ss.insertSheet(sheetName);
   sheet.clear();
+  
+  const headers = Object.keys(items[0]);
   sheet.appendRow(headers);
   
-  if (items && items.length > 0) {
-    const rows = items.map(item => headers.map(h => item[h] || ""));
-    sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
-  }
+  const rows = items.map(item => headers.map(h => {
+    const val = item[h];
+    return (typeof val === 'object') ? JSON.stringify(val) : val;
+  }));
+  
+  sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
   sheet.setFrozenRows(1);
+}
+
+function writeConfig(ss, config) {
+  let sheet = ss.getSheetByName(SHEETS.CONFIG) || ss.insertSheet(SHEETS.CONFIG);
+  sheet.clear();
+  const rows = Object.keys(config).map(key => [key, config[key]]);
+  if (rows.length > 0) {
+    sheet.getRange(1, 1, rows.length, 2).setValues(rows);
+  }
 }
   `.trim();
 
