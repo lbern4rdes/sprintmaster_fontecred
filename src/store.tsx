@@ -236,7 +236,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     pullData(); 
-    const pollInterval = setInterval(pullData, 5000); 
+    const pollInterval = setInterval(pullData, 2000); 
     return () => clearInterval(pollInterval);
   }, [state.config.gasUrl]); 
 

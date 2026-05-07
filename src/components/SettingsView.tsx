@@ -188,6 +188,42 @@ function writeConfig(ss, config) {
         </section>
 
         <section className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-6">
+          <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-50 pb-2">Status de Sincronização</h3>
+          <div className="space-y-4">
+             <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                <div>
+                   <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Base de Dados</p>
+                   <p className="text-xs font-black text-slate-900">Google Sheets Cloud</p>
+                </div>
+                <div className="flex items-center gap-2">
+                   <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                   <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Conectado</span>
+                </div>
+             </div>
+             
+             <div className="grid grid-cols-2 gap-3">
+                <button 
+                  onClick={() => window.location.reload()}
+                  className="flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-900 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-slate-800 transition-all"
+                >
+                  <RefreshCcw className="w-3.5 h-3.5" /> Forçar Pull
+                </button>
+                <a 
+                  href={config.gasUrl?.replace('/exec', '/edit')} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-blue-500 transition-all text-center"
+                >
+                   Abrir Planilha
+                </a>
+             </div>
+             <p className="text-[9px] text-slate-400 leading-relaxed">
+                * Os dados são sincronizados automaticamente a cada 2 segundos. Se a planilha estiver vazia, verifique as abas (DB_USERS, DB_CARDS...) na parte inferior do arquivo.
+             </p>
+          </div>
+        </section>
+
+        <section className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-6">
           <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-50 pb-2">Escalabilidade de Descontos (Retornos)</h3>
           <div className="space-y-5">
             <div className="flex items-center justify-between group">
