@@ -132,6 +132,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const lastLocalUpdate = useRef<number>(0);
   const recentlyDeletedIds = useRef<Set<string>>(new Set());
+  const dirtyItems = useRef<Map<string, any>>(new Map()); // Guarda itens novos/editados
   const isInitialMount = useRef<boolean>(true);
   const initialPullAttempted = useRef<boolean>(false);
   const isFromPull = useRef<boolean>(false);
@@ -139,12 +140,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [isInitialPulling, setIsInitialPulling] = useState(true);
 
   // Helper para marcar uma atualização local IMEDIATAMENTE
-  const markLocalUpdate = (deletedId?: string) => {
+  const markLocalUpdate = (id?: string, fullItem?: any) => {
     lastLocalUpdate.current = Date.now();
-    if (deletedId) {
-      recentlyDeletedIds.current.add(deletedId);
-      // Mantém na lista de bloqueio por 45 segundos (tempo de segurança para o GAS)
-      setTimeout(() => recentlyDeletedIds.current.delete(deletedId), 45000);
+    
+    if (id && fullItem) {
+      // É uma criação ou edição
+      dirtyItems.current.set(id, fullItem);
+      // Remove do estado "dirty" após 60 segundos (tempo de sobra para o GAS)
+      setTimeout(() => dirtyItems.current.delete(id), 60000);
+    } else if (id) {
+      // É uma exclusão
+      recentlyDeletedIds.current.add(id);
+      setTimeout(() => recentlyDeletedIds.current.delete(id), 60000);
     }
   };
 
@@ -198,10 +205,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     async function pullData() {
       const now = Date.now();
       
-      // BLOQUEIO TOTAL: Se houve alteração local nos últimos 20 segundos,
-      // ignoramos o pull para dar tempo do Google processar o nosso POST.
-      if (initialPullAttempted.current && (now - lastLocalUpdate.current < 20000)) {
-        return;
+      // BLOQUEIO: Se houve alteração local nos últimos 15 segundos, 
+      // somos extremamente criteriosos com o pull.
+      if (initialPullAttempted.current && (now - lastLocalUpdate.current < 15000)) {
+        // Não paramos o pull, mas vamos processar com cuidado abaixo
       }
 
       if (state.config.gasUrl && state.config.gasUrl.startsWith('http')) {
@@ -213,12 +220,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
           if (data && typeof data === 'object') {
             const currentState = stateRef.current;
             
-            // FILTRO DE FANTASMAS: Remove qualquer item que a nuvem enviou 
-            // mas que nós sabemos que foi apagado recentemente aqui.
-            if (data.cards) data.cards = data.cards.filter((c: any) => !recentlyDeletedIds.current.has(c.id));
-            if (data.devs) data.devs = data.devs.filter((d: any) => !recentlyDeletedIds.current.has(d.id));
-            if (data.sprints) data.sprints = data.sprints.filter((s: any) => !recentlyDeletedIds.current.has(s.id));
-            if (data.users) data.users = data.users.filter((u: any) => !recentlyDeletedIds.current.has(u.id));
+            // 1. FILTRO DE FANTASMAS (Exclusões)
+            const filterGhosts = (list: any[]) => list?.filter(item => !recentlyDeletedIds.current.has(item.id)) || [];
+            data.cards = filterGhosts(data.cards);
+            data.devs = filterGhosts(data.devs);
+            data.sprints = filterGhosts(data.sprints);
+            data.users = filterGhosts(data.users);
+            data.qa = filterGhosts(data.qa);
+            data.extras = filterGhosts(data.extras);
+
+            // 2. FORÇAR ITENS SUJOS (Criações/Edições que ainda não chegaram na nuvem)
+            const mergeDirty = (remoteList: any[], type: string) => {
+              const merged = [...remoteList];
+              dirtyItems.current.forEach((item, id) => {
+                // Se o item é do tipo correto e não está na lista remota, forçamos ele
+                const isCorrectType = 
+                  (type === 'cards' && item.title !== undefined) ||
+                  (type === 'devs' && item.name !== undefined && item.role === undefined) ||
+                  (type === 'users' && item.email !== undefined) ||
+                  (type === 'sprints' && item.startDate !== undefined);
+
+                if (isCorrectType && !merged.some(m => m.id === id)) {
+                  merged.push(item);
+                }
+              });
+              return merged;
+            };
+
+            data.cards = mergeDirty(data.cards, 'cards');
+            data.devs = mergeDirty(data.devs, 'devs');
+            data.users = mergeDirty(data.users, 'users');
+            data.sprints = mergeDirty(data.sprints, 'sprints');
 
             const remoteUsers = data.users || [];
             const hasAdmin = remoteUsers.some((u: User) => u.id === DEFAULT_ADMIN.id);
@@ -229,6 +261,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
               users: hasAdmin ? remoteUsers : [DEFAULT_ADMIN, ...remoteUsers]
             };
 
+            // Só atualiza se realmente houver diferença após a mesclagem
             if (JSON.stringify(updatedData) !== JSON.stringify(currentState)) {
               isFromPull.current = true;
               setState(updatedData);
@@ -285,14 +318,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const generateId = () => Math.random().toString(36).substr(2, 9);
 
-  const addSprint = (sprint: Omit<Sprint, 'id'>) => { markLocalUpdate(); setState(s => ({ ...s, sprints: [...s.sprints, { ...sprint, id: generateId() }] })); };
-  const addDev = (dev: Omit<Dev, 'id'>) => { markLocalUpdate(); setState(s => ({ ...s, devs: [...s.devs, { ...dev, id: generateId() }] })); };
+  const addSprint = (sprint: Omit<Sprint, 'id'>) => {
+    const newSprint = { ...sprint, id: generateId() };
+    markLocalUpdate(newSprint.id, newSprint);
+    setState(s => ({ ...s, sprints: [...s.sprints, newSprint] }));
+  };
+  const addDev = (dev: Omit<Dev, 'id'>) => {
+    const newDev = { ...dev, id: generateId() };
+    markLocalUpdate(newDev.id, newDev);
+    setState(s => ({ ...s, devs: [...s.devs, newDev] }));
+  };
   const addCard = (card: Omit<Card, 'id'>) => {
-    markLocalUpdate();
     const defaultCode = `CRD-${(state.cards.length + 1).toString().padStart(3, '0')}`;
+    const id = generateId();
     const newCard = {
       ...card,
-      id: generateId(),
+      id,
       code: card.code || defaultCode,
       tags: card.tags || [],
       comments: card.comments || []
@@ -307,6 +348,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     newCard.code = finalCode;
 
+    markLocalUpdate(id, newCard);
     setState(s => ({
       ...s,
       cards: [...s.cards, newCard]
@@ -346,14 +388,46 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }));
   };
   const addExtra = (extra: Omit<Extra, 'id'>) => { markLocalUpdate(); setState(s => ({ ...s, extras: [...s.extras, { ...extra, id: generateId() }] })); };
-  const addUser = (user: Omit<User, 'id'>) => { markLocalUpdate(); setState(s => ({ ...s, users: [...s.users, { ...user, id: generateId() }] })); };
+  const addUser = (user: Omit<User, 'id'>) => {
+    const newUser = { ...user, id: generateId() };
+    markLocalUpdate(newUser.id, newUser);
+    setState(s => ({ ...s, users: [...s.users, newUser] }));
+  };
 
-  const updateSprint = (id: string, sprint: Partial<Sprint>) => { markLocalUpdate(); setState(s => ({ ...s, sprints: s.sprints.map(x => x.id === id ? { ...x, ...sprint } : x) })); };
-  const updateDev = (id: string, dev: Partial<Dev>) => { markLocalUpdate(); setState(s => ({ ...s, devs: s.devs.map(x => x.id === id ? { ...x, ...dev } : x) })); };
-  const updateCard = (id: string, card: Partial<Card>) => { markLocalUpdate(); setState(s => ({ ...s, cards: s.cards.map(x => x.id === id ? { ...x, ...card } : x) })); };
+  const updateSprint = (id: string, sprint: Partial<Sprint>) => {
+    setState(s => {
+      const updated = s.sprints.map(x => x.id === id ? { ...x, ...sprint } : x);
+      const item = updated.find(x => x.id === id);
+      markLocalUpdate(id, item);
+      return { ...s, sprints: updated };
+    });
+  };
+  const updateDev = (id: string, dev: Partial<Dev>) => {
+    setState(s => {
+      const updated = s.devs.map(x => x.id === id ? { ...x, ...dev } : x);
+      const item = updated.find(x => x.id === id);
+      markLocalUpdate(id, item);
+      return { ...s, devs: updated };
+    });
+  };
+  const updateCard = (id: string, card: Partial<Card>) => {
+    setState(s => {
+      const updated = s.cards.map(x => x.id === id ? { ...x, ...card } : x);
+      const item = updated.find(x => x.id === id);
+      markLocalUpdate(id, item);
+      return { ...s, cards: updated };
+    });
+  };
   const updateQA = (id: string, qa: Partial<QA>) => { markLocalUpdate(); setState(s => ({ ...s, qa: s.qa.map(x => x.id === id ? { ...x, ...qa } : x) })); };
   const updateExtra = (id: string, extra: Partial<Extra>) => { markLocalUpdate(); setState(s => ({ ...s, extras: s.extras.map(x => x.id === id ? { ...x, ...extra } : x) })); };
-  const updateUser = (id: string, user: Partial<User>) => { markLocalUpdate(); setState(s => ({ ...s, users: s.users.map(x => x.id === id ? { ...x, ...user } : x) })); };
+  const updateUser = (id: string, user: Partial<User>) => {
+    setState(s => {
+      const updated = s.users.map(x => x.id === id ? { ...x, ...user } : x);
+      const item = updated.find(x => x.id === id);
+      markLocalUpdate(id, item);
+      return { ...s, users: updated };
+    });
+  };
 
   const deleteSprint = (id: string) => { markLocalUpdate(id); setState(s => ({ ...s, sprints: s.sprints.filter(x => x.id !== id) })); };
   const deleteDev = (id: string) => { markLocalUpdate(id); setState(s => ({ ...s, devs: s.devs.filter(x => x.id !== id) })); };
