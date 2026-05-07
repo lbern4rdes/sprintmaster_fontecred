@@ -73,19 +73,7 @@ export function LoginView() {
             />
           </div>
 
-          {(isInitialPulling || users.length > 1) && !error && (
-            <div className="flex flex-col items-center justify-center gap-1 py-2">
-              <div className="flex items-center gap-2">
-                {isInitialPulling && <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />}
-                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
-                  {isInitialPulling ? 'Sincronizando usuários...' : 'Base de usuários atualizada'}
-                </p>
-              </div>
-              <p className="text-[9px] text-slate-600 font-medium">
-                {users.length} {users.length === 1 ? 'usuário carregado' : 'usuários carregados'}
-              </p>
-            </div>
-          )}
+
 
           {error && (
             <motion.div 

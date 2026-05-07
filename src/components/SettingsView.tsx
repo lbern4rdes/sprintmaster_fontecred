@@ -60,25 +60,7 @@ export function SettingsView() {
           </div>
         </section>
 
-        <section className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-6">
-          <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-50 pb-2">Status de Sincronização</h3>
-          <div className="space-y-4">
-             <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
-                <div>
-                   <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Base de Dados</p>
-                   <p className="text-xs font-black text-slate-900">Supabase Cloud (PostgreSQL)</p>
-                </div>
-                <div className="flex items-center gap-2">
-                   <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                   <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Conectado Realtime</span>
-                </div>
-             </div>
-             
-             <p className="text-[9px] text-slate-400 leading-relaxed">
-                * O sistema agora utiliza o Supabase para sincronização instantânea entre múltiplos usuários. Não é mais necessário o uso de planilhas.
-             </p>
-          </div>
-        </section>
+
 
         <section className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-6">
           <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-50 pb-2">Escalabilidade de Descontos (Retornos)</h3>
