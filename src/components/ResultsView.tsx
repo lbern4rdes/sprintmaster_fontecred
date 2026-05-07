@@ -49,7 +49,7 @@ export function ResultsView() {
         </div>
         <div className="flex items-center gap-3 w-full md:w-auto">
           <div className="relative flex-1 md:flex-none">
-            <select 
+            <select
               value={filterSprint}
               onChange={(e) => setFilterSprint(e.target.value)}
               className="w-full md:w-48 pl-4 pr-10 py-2.5 text-xs font-black uppercase tracking-widest rounded-lg border border-slate-200 focus:border-slate-900 appearance-none bg-white font-bold text-slate-700 outline-none shadow-sm"
@@ -61,7 +61,7 @@ export function ResultsView() {
               <TrendingUp className="w-3.5 h-3.5" />
             </div>
           </div>
-          <button 
+          <button
             onClick={handleUpdate}
             className="flex items-center justify-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-sm active:scale-95 shrink-0"
           >
@@ -116,38 +116,38 @@ export function ResultsView() {
                     </td>
                     <td className="px-6 py-4 text-center">
                       <div className="flex flex-col items-center gap-1">
-                         <span className={cn(
-                           "font-black text-[11px]",
-                           row.completionPercent >= 100 ? "text-emerald-600" : 
-                           row.completionPercent >= 80 ? "text-blue-600" :
-                           "text-amber-600"
-                         )}>
-                           {row.completionPercent.toFixed(1)}%
-                         </span>
-                         <div className="w-12 h-1 bg-slate-100 rounded-full overflow-hidden">
-                            <div className={cn(
-                              "h-full rounded-full transition-all duration-500",
-                              row.completionPercent >= 100 ? "bg-emerald-500" : "bg-blue-500"
-                            )} style={{ width: `${Math.min(row.completionPercent, 100)}%` }} />
-                         </div>
+                        <span className={cn(
+                          "font-black text-[11px]",
+                          row.completionPercent >= 100 ? "text-emerald-600" :
+                            row.completionPercent >= 80 ? "text-blue-600" :
+                              "text-amber-600"
+                        )}>
+                          {row.completionPercent.toFixed(1)}%
+                        </span>
+                        <div className="w-12 h-1 bg-slate-100 rounded-full overflow-hidden">
+                          <div className={cn(
+                            "h-full rounded-full transition-all duration-500",
+                            row.completionPercent >= 100 ? "bg-emerald-500" : "bg-blue-500"
+                          )} style={{ width: `${Math.min(row.completionPercent, 100)}%` }} />
+                        </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 text-center">
                       <div className="flex flex-col items-center gap-1">
-                         <span className={cn(
-                           "font-black text-[11px]",
-                           row.qualityIndex >= 90 ? "text-emerald-600" : 
-                           row.qualityIndex >= 75 ? "text-amber-600" :
-                           "text-rose-600"
-                         )}>
-                           {row.qualityIndex.toFixed(1)}%
-                         </span>
-                         <div className="w-12 h-1 bg-slate-100 rounded-full overflow-hidden">
-                            <div className={cn(
-                              "h-full rounded-full transition-all duration-500",
-                              row.qualityIndex >= 80 ? "bg-emerald-500" : "bg-rose-500"
-                            )} style={{ width: `${row.qualityIndex}%` }} />
-                         </div>
+                        <span className={cn(
+                          "font-black text-[11px]",
+                          row.qualityIndex >= 90 ? "text-emerald-600" :
+                            row.qualityIndex >= 75 ? "text-amber-600" :
+                              "text-rose-600"
+                        )}>
+                          {row.qualityIndex.toFixed(1)}%
+                        </span>
+                        <div className="w-12 h-1 bg-slate-100 rounded-full overflow-hidden">
+                          <div className={cn(
+                            "h-full rounded-full transition-all duration-500",
+                            row.qualityIndex >= 80 ? "bg-emerald-500" : "bg-rose-500"
+                          )} style={{ width: `${row.qualityIndex}%` }} />
+                        </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 text-center">
@@ -171,8 +171,8 @@ export function ResultsView() {
               {results.length === 0 && (
                 <tr>
                   <td colSpan={9} className="px-6 py-16 text-center text-slate-400 italic text-sm font-medium">
-                     Nenhum dado consolidado disponível.<br/>
-                     <span className="text-[10px] uppercase font-bold tracking-widest mt-2 block text-slate-300">Lance informações nas abas e clique em calcular resultados.</span>
+                    Nenhum dado consolidado disponível.<br />
+                    <span className="text-[10px] uppercase font-bold tracking-widest mt-2 block text-slate-300">Lance informações nas abas e clique em calcular resultados.</span>
                   </td>
                 </tr>
               )}
