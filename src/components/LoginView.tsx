@@ -15,19 +15,22 @@ export function LoginView() {
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(false);
     
-    // Simulate slight delay
-    setTimeout(() => {
-      const success = login(email, password);
+    try {
+      const success = await login(email, password);
       if (!success) {
         setError(true);
         setLoading(false);
       }
-    }, 400);
+    } catch (err) {
+      console.error(err);
+      setError(true);
+      setLoading(false);
+    }
   };
 
   return (

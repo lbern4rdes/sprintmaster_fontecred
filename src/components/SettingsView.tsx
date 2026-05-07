@@ -15,136 +15,9 @@ export function SettingsView() {
     setConfig({ ...config, [key]: val });
   };
 
-  const gasBoilerplate = `
-/**
- * SprintMaster - Pro Database Sync Script v2.0
- * Este script transforma as abas da planilha no Banco de Dados Real.
- */
 
-const SHEETS = {
-  CONFIG: "DB_CONFIG",
-  SPRINTS: "DB_SPRINTS",
-  DEVS: "DB_DEVS",
-  CARDS: "DB_CARDS",
-  QA: "DB_QA",
-  EXTRAS: "DB_EXTRAS",
-  USERS: "DB_USERS"
-};
 
-function doGet(e) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const data = {
-    config: readConfig(ss),
-    sprints: readSheet(ss, SHEETS.SPRINTS),
-    devs: readSheet(ss, SHEETS.DEVS),
-    cards: readSheet(ss, SHEETS.CARDS),
-    qa: readSheet(ss, SHEETS.QA),
-    extras: readSheet(ss, SHEETS.EXTRAS),
-    users: readSheet(ss, SHEETS.USERS)
-  };
-  
-  // Se não houver usuários, garante pelo menos o admin padrão
-  if (data.users.length === 0) {
-    data.users = [{
-      id: "admin_root",
-      name: "Administrador Fontecred",
-      email: "admin@fontecred.com.br",
-      password: "12345678",
-      role: "Administrador",
-      active: true
-    }];
-  }
 
-  return ContentService.createTextOutput(JSON.stringify(data))
-    .setMimeType(ContentService.MimeType.JSON);
-}
-
-function doPost(e) {
-  try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const data = JSON.parse(e.postData.contents);
-    
-    // Salva cada entidade em sua respectiva aba
-    if (data.config) writeConfig(ss, data.config);
-    if (data.sprints) writeSheet(ss, SHEETS.SPRINTS, data.sprints);
-    if (data.devs) writeSheet(ss, SHEETS.DEVS, data.devs);
-    if (data.cards) writeSheet(ss, SHEETS.CARDS, data.cards);
-    if (data.qa) writeSheet(ss, SHEETS.QA, data.qa);
-    if (data.extras) writeSheet(ss, SHEETS.EXTRAS, data.extras);
-    if (data.users) writeSheet(ss, SHEETS.USERS, data.users);
-    
-    return ContentService.createTextOutput("Sync Success").setMimeType(ContentService.MimeType.TEXT);
-  } catch (err) {
-    return ContentService.createTextOutput("Error: " + err.message).setMimeType(ContentService.MimeType.TEXT);
-  }
-}
-
-// --- Funções Auxiliares de Leitura ---
-
-function readSheet(ss, sheetName) {
-  const sheet = ss.getSheetByName(sheetName);
-  if (!sheet) return [];
-  const values = sheet.getDataRange().getValues();
-  if (values.length < 2) return [];
-  
-  const headers = values[0];
-  return values.slice(1).map(row => {
-    let obj = {};
-    headers.forEach((h, i) => {
-      let val = row[i];
-      // Converte strings de booleanos/números se necessário
-      if (val === "true") val = true;
-      if (val === "false") val = false;
-      obj[h] = val;
-    });
-    return obj;
-  });
-}
-
-function readConfig(ss) {
-  const sheet = ss.getSheetByName(SHEETS.CONFIG);
-  if (!sheet) return {};
-  const values = sheet.getDataRange().getValues();
-  let config = {};
-  values.forEach(row => {
-    if (row[0]) config[row[0]] = row[1];
-  });
-  return config;
-}
-
-// --- Funções Auxiliares de Escrita ---
-
-function writeSheet(ss, sheetName, items) {
-  if (!items || items.length === 0) return;
-  let sheet = ss.getSheetByName(sheetName) || ss.insertSheet(sheetName);
-  sheet.clear();
-  
-  const headers = Object.keys(items[0]);
-  sheet.appendRow(headers);
-  
-  const rows = items.map(item => headers.map(h => {
-    const val = item[h];
-    return (typeof val === 'object' && val !== null) ? JSON.stringify(val) : (val === undefined ? "" : val);
-  }));
-  
-  sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
-  sheet.setFrozenRows(1);
-}
-
-function writeConfig(ss, config) {
-  let sheet = ss.getSheetByName(SHEETS.CONFIG) || ss.insertSheet(SHEETS.CONFIG);
-  sheet.clear();
-  const rows = Object.keys(config).map(key => [key, config[key]]);
-  if (rows.length > 0) {
-    sheet.getRange(1, 1, rows.length, 2).setValues(rows);
-  }
-}
-  `.trim();
-
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(gasBoilerplate);
-    alert('Script copiado para a área de transferência!');
-  };
 
   return (
     <div className="space-y-6 pb-12">
@@ -193,32 +66,16 @@ function writeConfig(ss, config) {
              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
                 <div>
                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Base de Dados</p>
-                   <p className="text-xs font-black text-slate-900">Google Sheets Cloud</p>
+                   <p className="text-xs font-black text-slate-900">Supabase Cloud (PostgreSQL)</p>
                 </div>
                 <div className="flex items-center gap-2">
                    <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                   <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Conectado</span>
+                   <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Conectado Realtime</span>
                 </div>
              </div>
              
-             <div className="grid grid-cols-2 gap-3">
-                <button 
-                  onClick={() => window.location.reload()}
-                  className="flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-900 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-slate-800 transition-all"
-                >
-                  <RefreshCcw className="w-3.5 h-3.5" /> Forçar Pull
-                </button>
-                <a 
-                  href={config.gasUrl?.replace('/exec', '/edit')} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-blue-500 transition-all text-center"
-                >
-                   Abrir Planilha
-                </a>
-             </div>
              <p className="text-[9px] text-slate-400 leading-relaxed">
-                * Os dados são sincronizados automaticamente a cada 2 segundos. Se a planilha estiver vazia, verifique as abas (DB_USERS, DB_CARDS...) na parte inferior do arquivo.
+                * O sistema agora utiliza o Supabase para sincronização instantânea entre múltiplos usuários. Não é mais necessário o uso de planilhas.
              </p>
           </div>
         </section>

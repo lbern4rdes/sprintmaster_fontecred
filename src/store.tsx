@@ -7,9 +7,10 @@ import { createContext, useContext, useState, useEffect, ReactNode, useRef } fro
 import {
   Sprint, Dev, Card, QA, Extra, Config,
   Complexity, CardType, ReturnType, ExtraType,
-  CardStatus, ResultRow, User, UserRole
+  CardStatus, ResultRow, User, UserRole, SprintStatus
 } from './types';
 import { DEFAULT_CONFIG } from './constants';
+import { supabase } from './lib/supabase';
 
 interface AppState {
   config: Config;
@@ -23,7 +24,7 @@ interface AppState {
 
 interface AppContextType extends AppState {
   currentUser: User | null;
-  login: (email: string, password: string) => boolean;
+  login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
 
   setConfig: (config: Config) => void;
@@ -35,26 +36,26 @@ interface AppContextType extends AppState {
   setUsers: (users: User[]) => void;
 
   // Helpers
-  addSprint: (sprint: Omit<Sprint, 'id'>) => void;
-  addDev: (dev: Omit<Dev, 'id'>) => void;
-  addCard: (card: Omit<Card, 'id'>) => void;
-  addQA: (qa: Omit<QA, 'id'>) => void;
-  addExtra: (extra: Omit<Extra, 'id'>) => void;
-  addUser: (user: Omit<User, 'id'>) => void;
+  addSprint: (sprint: Omit<Sprint, 'id'>) => Promise<void>;
+  addDev: (dev: Omit<Dev, 'id'>) => Promise<void>;
+  addCard: (card: Omit<Card, 'id'>) => Promise<void>;
+  addQA: (qa: Omit<QA, 'id'>) => Promise<void>;
+  addExtra: (extra: Omit<Extra, 'id'>) => Promise<void>;
+  addUser: (user: Omit<User, 'id'>) => Promise<void>;
 
-  updateSprint: (id: string, sprint: Partial<Sprint>) => void;
-  updateDev: (id: string, dev: Partial<Dev>) => void;
-  updateCard: (id: string, card: Partial<Card>) => void;
-  updateQA: (id: string, qa: Partial<QA>) => void;
-  updateExtra: (id: string, extra: Partial<Extra>) => void;
-  updateUser: (id: string, user: Partial<User>) => void;
+  updateSprint: (id: string, sprint: Partial<Sprint>) => Promise<void>;
+  updateDev: (id: string, dev: Partial<Dev>) => Promise<void>;
+  updateCard: (id: string, card: Partial<Card>) => Promise<void>;
+  updateQA: (id: string, qa: Partial<QA>) => Promise<void>;
+  updateExtra: (id: string, extra: Partial<Extra>) => Promise<void>;
+  updateUser: (id: string, user: Partial<User>) => Promise<void>;
 
-  deleteSprint: (id: string) => void;
-  deleteDev: (id: string) => void;
-  deleteCard: (id: string) => void;
-  deleteQA: (id: string) => void;
-  deleteExtra: (id: string) => void;
-  deleteUser: (id: string) => void;
+  deleteSprint: (id: string) => Promise<void>;
+  deleteDev: (id: string) => Promise<void>;
+  deleteCard: (id: string) => Promise<void>;
+  deleteQA: (id: string) => Promise<void>;
+  deleteExtra: (id: string) => Promise<void>;
+  deleteUser: (id: string) => Promise<void>;
 
   calculateResults: () => ResultRow[];
   isInitialPulling: boolean;
@@ -77,120 +78,140 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return saved ? JSON.parse(saved) : null;
   });
 
-  const [state, setState] = useState<AppState>(() => {
-    const savedData = localStorage.getItem('sprint_master_data');
-    const savedConfig = localStorage.getItem('sprint_master_config');
-
-    let initialState: AppState = {
-      config: DEFAULT_CONFIG,
-      sprints: [],
-      devs: [],
-      cards: [],
-      qa: [],
-      extras: [],
-      users: [DEFAULT_ADMIN]
-    };
-
-    if (savedData) {
-      try {
-        const data = JSON.parse(savedData);
-        initialState = { ...initialState, ...data };
-      } catch (e) {
-        console.error('Failed to parse saved data', e);
-      }
-    }
-
-    // Always prioritize the saved config (and URL)
-    if (savedConfig) {
-      try {
-        initialState.config = JSON.parse(savedConfig);
-      } catch (e) {
-        console.error('Failed to parse saved config', e);
-      }
-    }
-
-    // Se a URL estiver vazia e tivermos uma padrão no código, usa a padrão
-    if (DEFAULT_CONFIG.gasUrl && (!initialState.config.gasUrl || initialState.config.gasUrl === '')) {
-      initialState.config.gasUrl = DEFAULT_CONFIG.gasUrl;
-    }
-
-    // Migration/Safety checks
-    if (initialState.cards) {
-      initialState.cards = initialState.cards.map((c: any, index: number) => ({
-        ...c,
-        code: c.code || `CRD-${(index + 1).toString().padStart(3, '0')}`,
-        comments: c.comments || []
-      }));
-    }
-    if (!initialState.users) initialState.users = [];
-    if (!initialState.users.some((u: User) => u.id === DEFAULT_ADMIN.id)) {
-      initialState.users = [DEFAULT_ADMIN, ...initialState.users];
-    }
-
-    return initialState;
+  const [state, setState] = useState<AppState>({
+    config: DEFAULT_CONFIG,
+    sprints: [],
+    devs: [],
+    cards: [],
+    qa: [],
+    extras: [],
+    users: [DEFAULT_ADMIN]
   });
 
-  const lastLocalUpdate = useRef<number>(0);
-  const recentlyDeletedIds = useRef<Set<string>>(new Set());
-  const dirtyItems = useRef<Map<string, any>>(new Map()); // Guarda itens novos/editados
-  const isInitialMount = useRef<boolean>(true);
-  const initialPullAttempted = useRef<boolean>(false);
-  const isFromPull = useRef<boolean>(false);
-  const pushTimeout = useRef<any>(null);
   const [isInitialPulling, setIsInitialPulling] = useState(true);
 
-  // Helper para marcar uma atualização local IMEDIATAMENTE
-  const markLocalUpdate = (id?: string, fullItem?: any) => {
-    lastLocalUpdate.current = Date.now();
-    
-    if (id && fullItem) {
-      // É uma criação ou edição
-      dirtyItems.current.set(id, fullItem);
-      // Remove do estado "dirty" após 60 segundos (tempo de sobra para o GAS)
-      setTimeout(() => dirtyItems.current.delete(id), 60000);
-    } else if (id) {
-      // É uma exclusão
-      recentlyDeletedIds.current.add(id);
-      setTimeout(() => recentlyDeletedIds.current.delete(id), 60000);
+  // Fetch all data from Supabase
+  const fetchData = async () => {
+    try {
+      const [
+        { data: configData },
+        { data: sprintsData },
+        { data: devsData },
+        { data: cardsData },
+        { data: qaData },
+        { data: extrasData },
+        { data: profilesData }
+      ] = await Promise.all([
+        supabase.from('app_config').select('*').single(),
+        supabase.from('sprints').select('*').order('created_at', { ascending: false }),
+        supabase.from('devs').select('*').order('name'),
+        supabase.from('cards').select('*').order('created_at', { ascending: false }),
+        supabase.from('qa').select('*').order('date', { ascending: false }),
+        supabase.from('extras').select('*').order('date', { ascending: false }),
+        supabase.from('profiles').select('*').order('name')
+      ]);
+
+      const mappedUsers = (profilesData || []).map(p => ({
+        id: p.id,
+        name: p.name,
+        email: p.email,
+        password: p.password,
+        role: p.role as UserRole,
+        active: p.active
+      }));
+
+      // Se não houver config no banco, usa a padrão
+      const mappedConfig: Config = configData ? {
+        pointsSimple: configData.points_simple,
+        pointsMedium: configData.points_medium,
+        pointsComplex: configData.points_complex,
+        discount2Returns: configData.discount_2_returns,
+        discount3Returns: configData.discount_3_returns,
+        discountAbove3Returns: configData.discount_above_3_returns,
+        pointsHotfix: configData.points_hotfix,
+        pointsQueueJump: configData.points_queue_jump,
+        pointsReqFailure: configData.points_req_failure,
+        bonusEarly: configData.bonus_early,
+      } : DEFAULT_CONFIG;
+
+      setState({
+        config: mappedConfig,
+        sprints: (sprintsData || []).map(s => ({
+          id: s.id,
+          name: s.name,
+          startDate: s.start_date,
+          endDate: s.end_date,
+          status: s.status as SprintStatus,
+          observations: s.observations || ''
+        })),
+        devs: (devsData || []).map(d => ({
+          id: d.id,
+          name: d.name,
+          active: d.active,
+          observations: d.observations || ''
+        })),
+        cards: (cardsData || []).map(c => ({
+          id: c.id,
+          code: c.code,
+          sprintId: c.sprint_id,
+          devId: c.dev_id,
+          title: c.title,
+          type: c.type as CardType,
+          complexity: c.complexity as Complexity,
+          basePoints: Number(c.base_points),
+          estimatedDays: Number(c.estimated_days),
+          startDate: c.start_date || '',
+          deliveryDate: c.delivery_date || '',
+          completionDate: c.completion_date || '',
+          status: c.status as CardStatus,
+          isProject: c.is_project,
+          projectPoints: Number(c.project_points),
+          tags: c.tags || [],
+          comments: c.comments || [],
+          observations: c.observations || ''
+        })),
+        qa: (qaData || []).map(q => ({
+          id: q.id,
+          cardId: q.card_id,
+          date: q.date,
+          type: q.type as ReturnType,
+          description: q.description || '',
+          observations: q.observations || ''
+        })),
+        extras: (extrasData || []).map(e => ({
+          id: e.id,
+          sprintId: e.sprint_id,
+          devId: e.dev_id,
+          cardId: e.card_id,
+          type: e.type as ExtraType,
+          description: e.description || '',
+          points: Number(e.points),
+          date: e.date,
+          observations: e.observations || ''
+        })),
+        users: mappedUsers.length > 0 ? mappedUsers : [DEFAULT_ADMIN]
+      });
+    } catch (error) {
+      console.error('Error fetching data from Supabase:', error);
+    } finally {
+      setIsInitialPulling(false);
     }
   };
 
   useEffect(() => {
-    // 1. Sempre salva no localStorage como backup ultrarápido
-    localStorage.setItem('sprint_master_config', JSON.stringify(state.config));
-    localStorage.setItem('sprint_master_data', JSON.stringify(state));
+    fetchData();
 
-    const hasGasUrl = state.config.gasUrl && state.config.gasUrl.startsWith('http');
+    // Setup Realtime subscriptions
+    const channels = supabase.channel('schema-db-changes')
+      .on('postgres_changes', { event: '*', schema: 'public' }, () => {
+        fetchData();
+      })
+      .subscribe();
 
-    // 2. Sincronização DEBOUNCED para o GAS (Evita travar a UI)
-    if (hasGasUrl && !isInitialMount.current && !isFromPull.current) {
-      if (pushTimeout.current) clearTimeout(pushTimeout.current);
-      
-      pushTimeout.current = setTimeout(async () => {
-        try {
-          await fetch(state.config.gasUrl!, {
-            method: 'POST',
-            body: JSON.stringify(state),
-            mode: 'no-cors',
-            headers: { 'Content-Type': 'application/json' }
-          });
-        } catch (e) {
-          console.error('GAS Sync Failed', e);
-        }
-      }, 300); // Debounce baixíssimo (0.3s) para ser quase instantâneo na nuvem
-    }
-
-    if (isFromPull.current) {
-      isFromPull.current = false;
-    }
-    
-    isInitialMount.current = false;
-  }, [state]);
-
-  const stateRef = useRef(state);
-  useEffect(() => {
-    stateRef.current = state;
-  }, [state]);
+    return () => {
+      supabase.removeChannel(channels);
+    };
+  }, []);
 
   useEffect(() => {
     if (currentUser) {
@@ -200,121 +221,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [currentUser]);
 
-  // Initial pull and periodic polling from GAS
-  useEffect(() => {
-    async function pullData() {
-      const now = Date.now();
-      
-      // BLOQUEIO: Se houve alteração local nos últimos 15 segundos, 
-      // somos extremamente criteriosos com o pull.
-      if (initialPullAttempted.current && (now - lastLocalUpdate.current < 15000)) {
-        // Não paramos o pull, mas vamos processar com cuidado abaixo
-      }
-
-      if (state.config.gasUrl && state.config.gasUrl.startsWith('http')) {
-        try {
-          const res = await fetch(state.config.gasUrl);
-          const data = await res.json();
-          initialPullAttempted.current = true;
-
-          if (data && typeof data === 'object') {
-            const currentState = stateRef.current;
-            
-            // 1. CONFIRMAÇÃO POSITIVA: Limpa as travas se a nuvem já estiver atualizada
-            const remoteAllIds = new Set([
-              ...(data.cards?.map((c: any) => c.id) || []),
-              ...(data.devs?.map((d: any) => d.id) || []),
-              ...(data.users?.map((u: any) => u.id) || []),
-              ...(data.sprints?.map((s: any) => s.id) || [])
-            ]);
-
-            // Se o item que criamos/editamos já chegou na nuvem, ele não é mais "dirty"
-            dirtyItems.current.forEach((_, id) => {
-              if (remoteAllIds.has(id)) {
-                dirtyItems.current.delete(id);
-              }
-            });
-
-            // Se o item que apagamos sumiu da nuvem, ele não é mais "fantasma"
-            recentlyDeletedIds.current.forEach((id) => {
-              if (!remoteAllIds.has(id)) {
-                recentlyDeletedIds.current.delete(id);
-              }
-            });
-
-            // 2. FILTRO DE FANTASMAS (Exclusões que a nuvem ainda não viu)
-            const filterGhosts = (list: any[]) => list?.filter(item => !recentlyDeletedIds.current.has(item.id)) || [];
-            data.cards = filterGhosts(data.cards);
-            data.devs = filterGhosts(data.devs);
-            data.sprints = filterGhosts(data.sprints);
-            data.users = filterGhosts(data.users);
-            data.qa = filterGhosts(data.qa);
-            data.extras = filterGhosts(data.extras);
-
-            // 3. FORÇAR ITENS SUJOS (Criações/Edições que ainda não chegaram na nuvem)
-            const mergeDirty = (remoteList: any[], type: string) => {
-              const merged = [...remoteList];
-              dirtyItems.current.forEach((item, id) => {
-                // Checa se é o tipo correto para evitar misturar cards com devs
-                const isCorrectType = 
-                  (type === 'cards' && item.title !== undefined) ||
-                  (type === 'devs' && item.name !== undefined && item.role === undefined) ||
-                  (type === 'users' && item.email !== undefined) ||
-                  (type === 'sprints' && item.startDate !== undefined);
-
-                if (isCorrectType && !merged.some(m => m.id === id)) {
-                  merged.push(item);
-                }
-              });
-              return merged;
-            };
-
-            data.cards = mergeDirty(data.cards, 'cards');
-            data.devs = mergeDirty(data.devs, 'devs');
-            data.users = mergeDirty(data.users, 'users');
-            data.sprints = mergeDirty(data.sprints, 'sprints');
-
-            const remoteUsers = data.users || [];
-            const hasAdmin = remoteUsers.some((u: User) => u.id === DEFAULT_ADMIN.id);
-            
-            const updatedData = {
-              ...currentState,
-              ...data,
-              users: hasAdmin ? remoteUsers : [DEFAULT_ADMIN, ...remoteUsers]
-            };
-
-            // Só atualiza se realmente houver diferença após a mesclagem
-            if (JSON.stringify(updatedData) !== JSON.stringify(currentState)) {
-              isFromPull.current = true;
-              setState(updatedData);
-            }
-          }
-          setIsInitialPulling(false);
-        } catch (e) {
-          console.error('GAS Pull Failed', e);
-          initialPullAttempted.current = true;
-          setIsInitialPulling(false);
-        }
-      }
-    }
-
-    // Dispara ao montar
-    pullData(); 
-
-    // Dispara ao voltar para a aba (foco)
-    window.addEventListener('focus', pullData);
-
-    // Polling contínuo
-    const pollInterval = setInterval(pullData, 3000); 
-    
-    return () => {
-      clearInterval(pollInterval);
-      window.removeEventListener('focus', pullData);
-    };
-  }, [state.config.gasUrl]); 
-
-
-  const login = (email: string, password: string) => {
+  const login = async (email: string, password: string) => {
     const cleanedEmail = email.trim().toLowerCase();
     const user = state.users.find(u => 
       u.email.trim().toLowerCase() === cleanedEmail && 
@@ -330,58 +237,82 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const logout = () => setCurrentUser(null);
 
-  const setConfig = (config: Config) => { markLocalUpdate(); setState(s => ({ ...s, config })); };
-  const setSprints = (sprints: Sprint[]) => { markLocalUpdate(); setState(s => ({ ...s, sprints })); };
-  const setDevs = (devs: Dev[]) => { markLocalUpdate(); setState(s => ({ ...s, devs })); };
-  const setCards = (cards: Card[]) => { markLocalUpdate(); setState(s => ({ ...s, cards })); };
-  const setQA = (qa: QA[]) => { markLocalUpdate(); setState(s => ({ ...s, qa })); };
-  const setExtras = (extras: Extra[]) => { markLocalUpdate(); setState(s => ({ ...s, extras })); };
-  const setUsers = (users: User[]) => { markLocalUpdate(); setState(s => ({ ...s, users })); };
-
-  const generateId = () => Math.random().toString(36).substr(2, 9);
-
-  const addSprint = (sprint: Omit<Sprint, 'id'>) => {
-    const newSprint = { ...sprint, id: generateId() };
-    markLocalUpdate(newSprint.id, newSprint);
-    setState(s => ({ ...s, sprints: [...s.sprints, newSprint] }));
+  const setConfig = async (config: Config) => {
+    await supabase.from('app_config').upsert({
+      id: 1,
+      points_simple: config.pointsSimple,
+      points_medium: config.pointsMedium,
+      points_complex: config.pointsComplex,
+      discount_2_returns: config.discount2Returns,
+      discount_3_returns: config.discount3Returns,
+      discount_above_3_returns: config.discountAbove3Returns,
+      points_hotfix: config.pointsHotfix,
+      points_queue_jump: config.pointsQueueJump,
+      points_req_failure: config.pointsReqFailure,
+      bonus_early: config.bonusEarly
+    });
+    fetchData();
   };
-  const addDev = (dev: Omit<Dev, 'id'>) => {
-    const newDev = { ...dev, id: generateId() };
-    markLocalUpdate(newDev.id, newDev);
-    setState(s => ({ ...s, devs: [...s.devs, newDev] }));
+
+  const setSprints = (sprints: Sprint[]) => setState(s => ({ ...s, sprints }));
+  const setDevs = (devs: Dev[]) => setState(s => ({ ...s, devs }));
+  const setCards = (cards: Card[]) => setState(s => ({ ...s, cards }));
+  const setQA = (qa: QA[]) => setState(s => ({ ...s, qa }));
+  const setExtras = (extras: Extra[]) => setState(s => ({ ...s, extras }));
+  const setUsers = (users: User[]) => setState(s => ({ ...s, users }));
+
+  const addSprint = async (sprint: Omit<Sprint, 'id'>) => {
+    await supabase.from('sprints').insert({
+      name: sprint.name,
+      start_date: sprint.startDate,
+      end_date: sprint.endDate,
+      status: sprint.status,
+      observations: sprint.observations
+    });
+    fetchData();
   };
-  const addCard = (card: Omit<Card, 'id'>) => {
+
+  const addDev = async (dev: Omit<Dev, 'id'>) => {
+    await supabase.from('devs').insert({
+      name: dev.name,
+      active: dev.active,
+      observations: dev.observations
+    });
+    fetchData();
+  };
+
+  const addCard = async (card: Omit<Card, 'id'>) => {
     const defaultCode = `CRD-${(state.cards.length + 1).toString().padStart(3, '0')}`;
-    const id = generateId();
-    const newCard = {
-      ...card,
-      id,
-      code: card.code || defaultCode,
-      tags: card.tags || [],
-      comments: card.comments || []
-    };
-
-    // Safety check: ensure unique code
-    let finalCode = newCard.code;
+    let finalCode = card.code || defaultCode;
+    
     let counter = 1;
     while (state.cards.some(c => c.code === finalCode)) {
-      finalCode = `${newCard.code}-${counter}`;
+      finalCode = `${card.code || defaultCode}-${counter}`;
       counter++;
     }
-    newCard.code = finalCode;
 
-    markLocalUpdate(id, newCard);
-    setState(s => ({
-      ...s,
-      cards: [...s.cards, newCard]
-    }));
+    await supabase.from('cards').insert({
+      code: finalCode,
+      sprint_id: card.sprintId,
+      dev_id: card.devId,
+      title: card.title,
+      type: card.type,
+      complexity: card.complexity,
+      base_points: card.basePoints,
+      estimated_days: card.estimatedDays,
+      start_date: card.startDate,
+      delivery_date: card.deliveryDate,
+      status: card.status,
+      is_project: card.isProject,
+      project_points: card.projectPoints,
+      tags: card.tags,
+      comments: card.comments,
+      observations: card.observations
+    });
+    fetchData();
   };
-  const addQA = (qa: Omit<QA, 'id'>) => {
-    markLocalUpdate();
-    const id = generateId();
-    const newQA = { ...qa, id };
 
-    // Find card to check current failure count
+  const addQA = async (qa: Omit<QA, 'id'>) => {
     const card = state.cards.find(c => c.id === qa.cardId);
     const cardFailures = state.qa.filter(q => q.cardId === qa.cardId && q.type === ReturnType.DEV_FAILURE).length;
     const newFailureCount = qa.type === ReturnType.DEV_FAILURE ? cardFailures + 1 : cardFailures;
@@ -393,70 +324,158 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     const commentRecord = {
-      id: generateId(),
+      id: Math.random().toString(36).substr(2, 9),
       text: `🚩 RETORNO QA: ${qa.type}. Descrição: ${qa.description}. Impacto: ${discount > 0 ? `Descontou ${discount} pts` : 'Sem desconto'} (Total: ${newFailureCount}x)`,
       date: new Date().toISOString(),
       isSystem: true
     };
 
-    setState(s => ({
-      ...s,
-      qa: [...s.qa, newQA],
-      cards: s.cards.map(c => c.id === qa.cardId ? {
-        ...c,
-        comments: [...(c.comments || []), commentRecord],
+    const updatedComments = [...(card?.comments || []), commentRecord];
+
+    await Promise.all([
+      supabase.from('qa').insert({
+        card_id: qa.cardId,
+        date: qa.date,
+        type: qa.type,
+        description: qa.description,
+        observations: qa.observations
+      }),
+      supabase.from('cards').update({
+        comments: updatedComments,
         status: CardStatus.RETURNED
-      } : c)
-    }));
-  };
-  const addExtra = (extra: Omit<Extra, 'id'>) => { markLocalUpdate(); setState(s => ({ ...s, extras: [...s.extras, { ...extra, id: generateId() }] })); };
-  const addUser = (user: Omit<User, 'id'>) => {
-    const newUser = { ...user, id: generateId() };
-    markLocalUpdate(newUser.id, newUser);
-    setState(s => ({ ...s, users: [...s.users, newUser] }));
+      }).eq('id', qa.cardId)
+    ]);
+    
+    fetchData();
   };
 
-  const updateSprint = (id: string, sprint: Partial<Sprint>) => {
-    setState(s => {
-      const updated = s.sprints.map(x => x.id === id ? { ...x, ...sprint } : x);
-      const item = updated.find(x => x.id === id);
-      markLocalUpdate(id, item);
-      return { ...s, sprints: updated };
+  const addExtra = async (extra: Omit<Extra, 'id'>) => {
+    await supabase.from('extras').insert({
+      sprint_id: extra.sprintId,
+      dev_id: extra.devId,
+      card_id: extra.cardId,
+      type: extra.type,
+      description: extra.description,
+      points: extra.points,
+      date: extra.date,
+      observations: extra.observations
     });
-  };
-  const updateDev = (id: string, dev: Partial<Dev>) => {
-    setState(s => {
-      const updated = s.devs.map(x => x.id === id ? { ...x, ...dev } : x);
-      const item = updated.find(x => x.id === id);
-      markLocalUpdate(id, item);
-      return { ...s, devs: updated };
-    });
-  };
-  const updateCard = (id: string, card: Partial<Card>) => {
-    setState(s => {
-      const updated = s.cards.map(x => x.id === id ? { ...x, ...card } : x);
-      const item = updated.find(x => x.id === id);
-      markLocalUpdate(id, item);
-      return { ...s, cards: updated };
-    });
-  };
-  const updateQA = (id: string, qa: Partial<QA>) => { markLocalUpdate(); setState(s => ({ ...s, qa: s.qa.map(x => x.id === id ? { ...x, ...qa } : x) })); };
-  const updateExtra = (id: string, extra: Partial<Extra>) => { markLocalUpdate(); setState(s => ({ ...s, extras: s.extras.map(x => x.id === id ? { ...x, ...extra } : x) })); };
-  const updateUser = (id: string, user: Partial<User>) => {
-    setState(s => {
-      const updated = s.users.map(x => x.id === id ? { ...x, ...user } : x);
-      const item = updated.find(x => x.id === id);
-      markLocalUpdate(id, item);
-      return { ...s, users: updated };
-    });
+    fetchData();
   };
 
-  const deleteSprint = (id: string) => { markLocalUpdate(id); setState(s => ({ ...s, sprints: s.sprints.filter(x => x.id !== id) })); };
-  const deleteDev = (id: string) => { markLocalUpdate(id); setState(s => ({ ...s, devs: s.devs.filter(x => x.id !== id) })); };
-  const deleteCard = (id: string) => { markLocalUpdate(id); setState(s => ({ ...s, cards: s.cards.filter(x => x.id !== id) })); };
-  const deleteQA = (id: string) => { markLocalUpdate(id); setState(s => ({ ...s, qa: s.qa.filter(x => x.id !== id) })); };
-  const deleteExtra = (id: string) => { markLocalUpdate(id); setState(s => ({ ...s, extras: s.extras.filter(x => x.id !== id) })); };
-  const deleteUser = (id: string) => { markLocalUpdate(id); setState(s => ({ ...s, users: s.users.filter(x => x.id !== id) })); };
+  const addUser = async (user: Omit<User, 'id'>) => {
+    await supabase.from('profiles').insert({
+      email: user.email,
+      name: user.name,
+      password: user.password,
+      role: user.role,
+      active: user.active
+    });
+    fetchData();
+  };
+
+  const updateSprint = async (id: string, sprint: Partial<Sprint>) => {
+    await supabase.from('sprints').update({
+      name: sprint.name,
+      start_date: sprint.startDate,
+      end_date: sprint.endDate,
+      status: sprint.status,
+      observations: sprint.observations
+    }).eq('id', id);
+    fetchData();
+  };
+
+  const updateDev = async (id: string, dev: Partial<Dev>) => {
+    await supabase.from('devs').update({
+      name: dev.name,
+      active: dev.active,
+      observations: dev.observations
+    }).eq('id', id);
+    fetchData();
+  };
+
+  const updateCard = async (id: string, card: Partial<Card>) => {
+    await supabase.from('cards').update({
+      code: card.code,
+      sprint_id: card.sprintId,
+      dev_id: card.devId,
+      title: card.title,
+      type: card.type,
+      complexity: card.complexity,
+      base_points: card.basePoints,
+      estimated_days: card.estimatedDays,
+      start_date: card.startDate,
+      delivery_date: card.deliveryDate,
+      completion_date: card.completionDate,
+      status: card.status,
+      is_project: card.isProject,
+      project_points: card.projectPoints,
+      tags: card.tags,
+      comments: card.comments,
+      observations: card.observations
+    }).eq('id', id);
+    fetchData();
+  };
+
+  const updateQA = async (id: string, qa: Partial<QA>) => {
+    await supabase.from('qa').update({
+      type: qa.type,
+      description: qa.description,
+      observations: qa.observations
+    }).eq('id', id);
+    fetchData();
+  };
+
+  const updateExtra = async (id: string, extra: Partial<Extra>) => {
+    await supabase.from('extras').update({
+      type: extra.type,
+      description: extra.description,
+      points: extra.points,
+      observations: extra.observations
+    }).eq('id', id);
+    fetchData();
+  };
+
+  const updateUser = async (id: string, user: Partial<User>) => {
+    await supabase.from('profiles').update({
+      email: user.email,
+      name: user.name,
+      password: user.password,
+      role: user.role,
+      active: user.active
+    }).eq('id', id);
+    fetchData();
+  };
+
+  const deleteSprint = async (id: string) => {
+    await supabase.from('sprints').delete().eq('id', id);
+    fetchData();
+  };
+
+  const deleteDev = async (id: string) => {
+    await supabase.from('devs').delete().eq('id', id);
+    fetchData();
+  };
+
+  const deleteCard = async (id: string) => {
+    await supabase.from('cards').delete().eq('id', id);
+    fetchData();
+  };
+
+  const deleteQA = async (id: string) => {
+    await supabase.from('qa').delete().eq('id', id);
+    fetchData();
+  };
+
+  const deleteExtra = async (id: string) => {
+    await supabase.from('extras').delete().eq('id', id);
+    fetchData();
+  };
+
+  const deleteUser = async (id: string) => {
+    await supabase.from('profiles').delete().eq('id', id);
+    fetchData();
+  };
 
   const calculateResults = (): ResultRow[] => {
     const results: ResultRow[] = [];
@@ -476,7 +495,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
         const completionPercent = plannedPoints > 0 ? (deliveredPoints / plannedPoints) * 100 : 0;
 
-        // Discontos por retornos de Homologação
         let totalDiscounts = 0;
         let totalDevFailures = 0;
 
@@ -492,7 +510,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
           }
         });
 
-        // Extras
         const devExtras = state.extras.filter(e => e.sprintId === sprint.id && e.devId === dev.id);
         const totalExtras = devExtras.reduce((acc, e) => acc + e.points, 0);
 

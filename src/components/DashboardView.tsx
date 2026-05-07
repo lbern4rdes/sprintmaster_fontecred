@@ -111,12 +111,6 @@ export function DashboardView() {
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-3">
             <h2 className="text-2xl font-black text-slate-900 tracking-tight">Visão Geral da Sprint</h2>
-            {config.gasUrl && (
-              <div className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-50 border border-emerald-100 rounded-full">
-                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest leading-none">Cloud Sync</span>
-              </div>
-            )}
           </div>
           {activeSprint && (
             <div className="flex items-center gap-2 mt-1">
