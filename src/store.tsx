@@ -192,9 +192,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     async function pullData() {
       const now = Date.now();
       
-      // Bloqueia pull se houve alteração local MUITO recente (evita race condition)
-      // A exceção é se ainda for a tentativa inicial (initialPullAttempted === false)
-      if (initialPullAttempted.current && (now - lastLocalUpdate.current < 3000)) {
+      // BLOQUEIO CRÍTICO: Se houve alteração local nos últimos 10 segundos, 
+      // ignoramos o pull para dar tempo do Google processar o nosso POST.
+      // Isso evita o efeito "piscada" (sumir e aparecer).
+      if (initialPullAttempted.current && (now - lastLocalUpdate.current < 10000)) {
         return;
       }
 
@@ -206,27 +207,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
           if (data && typeof data === 'object') {
             const currentState = stateRef.current;
-            const isLocalEmpty = currentState.devs.length === 0 && currentState.sprints.length === 0 && currentState.cards.length === 0;
             
-            // Verificação mais flexível da estrutura remota
+            // Mesclagem Inteligente: Só atualizamos se os dados da nuvem 
+            // forem realmente diferentes E não estivermos em janela de proteção
             const remoteDevs = data.devs || [];
             const remoteCards = data.cards || [];
-            const isRemoteEmpty = remoteDevs.length === 0 && remoteCards.length === 0;
-
-            if (!isRemoteEmpty || isLocalEmpty) {
-              const remoteUsers = data.users || [];
-              const hasAdmin = remoteUsers.some((u: User) => u.id === DEFAULT_ADMIN.id);
-              
-              const updatedData = {
-                ...currentState,
-                ...data,
-                users: hasAdmin ? remoteUsers : [DEFAULT_ADMIN, ...remoteUsers]
-              };
-
-              if (JSON.stringify(updatedData) !== JSON.stringify(currentState)) {
-                isFromPull.current = true;
-                setState(updatedData);
+            
+            // Se a nuvem retornar menos itens do que temos localmente durante a janela de 15s,
+            // desconfiamos que a nuvem está atrasada e ignoramos o pull.
+            if (now - lastLocalUpdate.current < 15000) {
+              if (remoteDevs.length < currentState.devs.length || remoteCards.length < currentState.cards.length) {
+                console.log('Sync Protection: Cloud seems stale, ignoring pull.');
+                return;
               }
+            }
+
+            const remoteUsers = data.users || [];
+            const hasAdmin = remoteUsers.some((u: User) => u.id === DEFAULT_ADMIN.id);
+            
+            const updatedData = {
+              ...currentState,
+              ...data,
+              users: hasAdmin ? remoteUsers : [DEFAULT_ADMIN, ...remoteUsers]
+            };
+
+            if (JSON.stringify(updatedData) !== JSON.stringify(currentState)) {
+              isFromPull.current = true;
+              setState(updatedData);
             }
           }
           setIsInitialPulling(false);
