@@ -161,15 +161,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [state]);
 
   useEffect(() => {
-    const hasGasUrl = state.config.gasUrl && state.config.gasUrl.startsWith('http');
     if (currentUser) {
-      if (!hasGasUrl) {
-        localStorage.setItem('sprint_master_session', JSON.stringify(currentUser));
-      }
+      localStorage.setItem('sprint_master_session', JSON.stringify(currentUser));
     } else {
       localStorage.removeItem('sprint_master_session');
     }
-  }, [currentUser, state.config.gasUrl]);
+  }, [currentUser]);
 
   // Initial pull and periodic polling from GAS
   useEffect(() => {
