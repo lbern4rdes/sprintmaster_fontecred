@@ -9,11 +9,13 @@ import { LogIn, ShieldAlert } from 'lucide-react';
 import { motion } from 'motion/react';
 
 export function LoginView() {
-  const { login } = useApp();
+  const { login, users } = useApp();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  const isSyncing = users.length <= 1;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,6 +71,13 @@ export function LoginView() {
               className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder:text-slate-600 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm"
             />
           </div>
+
+          {isSyncing && !error && (
+            <div className="flex items-center justify-center gap-2 py-2">
+              <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Sincronizando base de usuários...</p>
+            </div>
+          )}
 
           {error && (
             <motion.div 

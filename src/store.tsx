@@ -129,8 +129,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return initialState;
   });
 
-  // Trava para evitar que o "pull" sobrescreva uma mudança local recente
   const lastLocalUpdate = useRef<number>(0);
+  const isInitialMount = useRef<boolean>(true);
+  const initialPullAttempted = useRef<boolean>(false);
+  const isFromPull = useRef<boolean>(false);
 
   useEffect(() => {
     // 1. Always save the config to a dedicated key so the URL is never lost
@@ -142,7 +144,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('sprint_master_data', JSON.stringify(state));
 
     // 3. Auto-sync to GAS if URL is configured
-    if (hasGasUrl) {
+    // Only push if it's NOT the initial mount and NOT from a pull
+    if (hasGasUrl && !isInitialMount.current && !isFromPull.current) {
       lastLocalUpdate.current = Date.now(); // Marca que houve uma alteração local
       const syncData = async () => {
         try {
@@ -158,6 +161,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       };
       syncData();
     }
+
+    if (isFromPull.current) {
+      isFromPull.current = false;
+    }
+    
+    isInitialMount.current = false;
+  }, [state]);
+
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
   }, [state]);
 
   useEffect(() => {
@@ -171,9 +185,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Initial pull and periodic polling from GAS
   useEffect(() => {
     async function pullData() {
-      // Se houve uma alteração local nos últimos 10 segundos, não faz o pull
-      // Isso evita que o dado antigo da nuvem sobrescreva o dado novo que ainda está sendo processado
-      if (Date.now() - lastLocalUpdate.current < 10000) {
+      const now = Date.now();
+      
+      // Se houve uma alteração local nos últimos 5 segundos, não faz o pull
+      // EXCEÇÃO: Se for a primeiríssima tentativa (initialPullAttempted), ignoramos a trava
+      if (initialPullAttempted.current && (now - lastLocalUpdate.current < 5000)) {
         return;
       }
 
@@ -181,22 +197,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
         try {
           const res = await fetch(state.config.gasUrl);
           const data = await res.json();
+          initialPullAttempted.current = true;
 
           if (data && data.config) {
-            const isLocalEmpty = state.devs.length === 0 && state.sprints.length === 0 && state.cards.length === 0;
+            const currentState = stateRef.current;
+            const isLocalEmpty = currentState.devs.length === 0 && currentState.sprints.length === 0 && currentState.cards.length === 0;
             const isRemoteEmpty = !data.devs || (data.devs.length === 0 && data.cards.length === 0);
 
             if (!isRemoteEmpty || isLocalEmpty) {
-              if (JSON.stringify(data) !== JSON.stringify(state)) {
+              if (JSON.stringify(data) !== JSON.stringify(currentState)) {
                 if (!data.users.some((u: User) => u.id === DEFAULT_ADMIN.id)) {
                   data.users = [DEFAULT_ADMIN, ...data.users];
                 }
+                isFromPull.current = true;
                 setState(data);
               }
             }
           }
         } catch (e) {
           console.error('GAS Pull Failed', e);
+          initialPullAttempted.current = true; // Mesmo com erro, consideramos que tentamos
         }
       }
     }
@@ -204,7 +224,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     pullData(); 
     const pollInterval = setInterval(pullData, 15000); 
     return () => clearInterval(pollInterval);
-  }, [state.config.gasUrl, state]); 
+  }, [state.config.gasUrl]); 
 
 
   const login = (email: string, password: string) => {
