@@ -134,6 +134,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const isInitialMount = useRef<boolean>(true);
   const initialPullAttempted = useRef<boolean>(false);
   const isFromPull = useRef<boolean>(false);
+  const pushTimeout = useRef<any>(null);
   const [isInitialPulling, setIsInitialPulling] = useState(true);
 
   // Helper para marcar uma atualização local IMEDIATAMENTE
@@ -153,20 +154,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // 3. Auto-sync to GAS if URL is configured
     // Only push if it's NOT the initial mount and NOT from a pull
     if (hasGasUrl && !isInitialMount.current && !isFromPull.current) {
-      // Aqui não marcamos mais o lastLocalUpdate, pois ele já foi marcado na função que disparou o setState
-      const syncData = async () => {
+      if (pushTimeout.current) clearTimeout(pushTimeout.current);
+      
+      pushTimeout.current = setTimeout(async () => {
         try {
           await fetch(state.config.gasUrl!, {
             method: 'POST',
             body: JSON.stringify(state),
-            mode: 'no-cors', // Important for GAS to avoid CORS issues on simple POSTs
+            mode: 'no-cors',
             headers: { 'Content-Type': 'application/json' }
           });
         } catch (e) {
           console.error('GAS Sync Failed', e);
         }
-      };
-      syncData();
+      }, 1500); // 1.5 segundos de debounce para não travar a UI enquanto você digita
     }
 
     if (isFromPull.current) {
@@ -241,7 +242,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     pullData(); 
-    const pollInterval = setInterval(pullData, 2000); 
+    const pollInterval = setInterval(pullData, 4000); 
     return () => clearInterval(pollInterval);
   }, [state.config.gasUrl]); 
 

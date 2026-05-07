@@ -628,7 +628,7 @@ export function CardsView() {
                       <button onClick={() => startEdit(card)} className="p-2 text-slate-400 hover:text-slate-900 hover:bg-slate-50 rounded-lg transition-all">
                         <Edit2 className="w-4 h-4" />
                       </button>
-                      <button onClick={() => { if (confirm('Excluir card permanentemente?')) deleteCard(card.id) }} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all">
+                      <button onClick={() => deleteCard(card.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
