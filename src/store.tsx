@@ -220,7 +220,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
           if (data && typeof data === 'object') {
             const currentState = stateRef.current;
             
-            // 1. FILTRO DE FANTASMAS (Exclusões)
+            // 1. CONFIRMAÇÃO POSITIVA: Limpa as travas se a nuvem já estiver atualizada
+            const remoteAllIds = new Set([
+              ...(data.cards?.map((c: any) => c.id) || []),
+              ...(data.devs?.map((d: any) => d.id) || []),
+              ...(data.users?.map((u: any) => u.id) || []),
+              ...(data.sprints?.map((s: any) => s.id) || [])
+            ]);
+
+            // Se o item que criamos/editamos já chegou na nuvem, ele não é mais "dirty"
+            dirtyItems.current.forEach((_, id) => {
+              if (remoteAllIds.has(id)) {
+                dirtyItems.current.delete(id);
+              }
+            });
+
+            // Se o item que apagamos sumiu da nuvem, ele não é mais "fantasma"
+            recentlyDeletedIds.current.forEach((id) => {
+              if (!remoteAllIds.has(id)) {
+                recentlyDeletedIds.current.delete(id);
+              }
+            });
+
+            // 2. FILTRO DE FANTASMAS (Exclusões que a nuvem ainda não viu)
             const filterGhosts = (list: any[]) => list?.filter(item => !recentlyDeletedIds.current.has(item.id)) || [];
             data.cards = filterGhosts(data.cards);
             data.devs = filterGhosts(data.devs);
@@ -229,11 +251,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
             data.qa = filterGhosts(data.qa);
             data.extras = filterGhosts(data.extras);
 
-            // 2. FORÇAR ITENS SUJOS (Criações/Edições que ainda não chegaram na nuvem)
+            // 3. FORÇAR ITENS SUJOS (Criações/Edições que ainda não chegaram na nuvem)
             const mergeDirty = (remoteList: any[], type: string) => {
               const merged = [...remoteList];
               dirtyItems.current.forEach((item, id) => {
-                // Se o item é do tipo correto e não está na lista remota, forçamos ele
+                // Checa se é o tipo correto para evitar misturar cards com devs
                 const isCorrectType = 
                   (type === 'cards' && item.title !== undefined) ||
                   (type === 'devs' && item.name !== undefined && item.role === undefined) ||
