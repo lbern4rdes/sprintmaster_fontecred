@@ -143,16 +143,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    // 1. Always save the config to a dedicated key so the URL is never lost
+    // 1. Sempre salva no localStorage como backup ultrarápido
     localStorage.setItem('sprint_master_config', JSON.stringify(state.config));
+    localStorage.setItem('sprint_master_data', JSON.stringify(state));
 
     const hasGasUrl = state.config.gasUrl && state.config.gasUrl.startsWith('http');
 
-    // 2. Save data to localStorage as a local backup
-    localStorage.setItem('sprint_master_data', JSON.stringify(state));
-
-    // 3. Auto-sync to GAS if URL is configured
-    // Only push if it's NOT the initial mount and NOT from a pull
+    // 2. Sincronização DEBOUNCED para o GAS (Evita travar a UI)
     if (hasGasUrl && !isInitialMount.current && !isFromPull.current) {
       if (pushTimeout.current) clearTimeout(pushTimeout.current);
       
@@ -167,7 +164,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         } catch (e) {
           console.error('GAS Sync Failed', e);
         }
-      }, 1500); // 1.5 segundos de debounce para não travar a UI enquanto você digita
+      }, 300); // Debounce baixíssimo (0.3s) para ser quase instantâneo na nuvem
     }
 
     if (isFromPull.current) {
@@ -195,9 +192,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     async function pullData() {
       const now = Date.now();
       
-      // Se houve uma alteração local nos últimos 5 segundos, não faz o pull
-      // EXCEÇÃO: Se for a primeiríssima tentativa (initialPullAttempted), ignoramos a trava
-      if (initialPullAttempted.current && (now - lastLocalUpdate.current < 5000)) {
+      // Bloqueia pull se houve alteração local MUITO recente (evita race condition)
+      // A exceção é se ainda for a tentativa inicial (initialPullAttempted === false)
+      if (initialPullAttempted.current && (now - lastLocalUpdate.current < 3000)) {
         return;
       }
 
@@ -241,9 +238,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    // Dispara ao montar
     pullData(); 
-    const pollInterval = setInterval(pullData, 4000); 
-    return () => clearInterval(pollInterval);
+
+    // Dispara ao voltar para a aba (foco)
+    window.addEventListener('focus', pullData);
+
+    // Polling contínuo
+    const pollInterval = setInterval(pullData, 3000); 
+    
+    return () => {
+      clearInterval(pollInterval);
+      window.removeEventListener('focus', pullData);
+    };
   }, [state.config.gasUrl]); 
 
 
