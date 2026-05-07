@@ -131,6 +131,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   });
 
   const lastLocalUpdate = useRef<number>(0);
+  const recentlyDeletedIds = useRef<Set<string>>(new Set());
   const isInitialMount = useRef<boolean>(true);
   const initialPullAttempted = useRef<boolean>(false);
   const isFromPull = useRef<boolean>(false);
@@ -138,8 +139,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [isInitialPulling, setIsInitialPulling] = useState(true);
 
   // Helper para marcar uma atualização local IMEDIATAMENTE
-  const markLocalUpdate = () => {
+  const markLocalUpdate = (deletedId?: string) => {
     lastLocalUpdate.current = Date.now();
+    if (deletedId) {
+      recentlyDeletedIds.current.add(deletedId);
+      // Mantém na lista de bloqueio por 45 segundos (tempo de segurança para o GAS)
+      setTimeout(() => recentlyDeletedIds.current.delete(deletedId), 45000);
+    }
   };
 
   useEffect(() => {
@@ -192,10 +198,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     async function pullData() {
       const now = Date.now();
       
-      // BLOQUEIO CRÍTICO: Se houve alteração local nos últimos 10 segundos, 
+      // BLOQUEIO TOTAL: Se houve alteração local nos últimos 20 segundos,
       // ignoramos o pull para dar tempo do Google processar o nosso POST.
-      // Isso evita o efeito "piscada" (sumir e aparecer).
-      if (initialPullAttempted.current && (now - lastLocalUpdate.current < 10000)) {
+      if (initialPullAttempted.current && (now - lastLocalUpdate.current < 20000)) {
         return;
       }
 
@@ -208,19 +213,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
           if (data && typeof data === 'object') {
             const currentState = stateRef.current;
             
-            // Mesclagem Inteligente: Só atualizamos se os dados da nuvem 
-            // forem realmente diferentes E não estivermos em janela de proteção
-            const remoteDevs = data.devs || [];
-            const remoteCards = data.cards || [];
-            
-            // Se a nuvem retornar menos itens do que temos localmente durante a janela de 15s,
-            // desconfiamos que a nuvem está atrasada e ignoramos o pull.
-            if (now - lastLocalUpdate.current < 15000) {
-              if (remoteDevs.length < currentState.devs.length || remoteCards.length < currentState.cards.length) {
-                console.log('Sync Protection: Cloud seems stale, ignoring pull.');
-                return;
-              }
-            }
+            // FILTRO DE FANTASMAS: Remove qualquer item que a nuvem enviou 
+            // mas que nós sabemos que foi apagado recentemente aqui.
+            if (data.cards) data.cards = data.cards.filter((c: any) => !recentlyDeletedIds.current.has(c.id));
+            if (data.devs) data.devs = data.devs.filter((d: any) => !recentlyDeletedIds.current.has(d.id));
+            if (data.sprints) data.sprints = data.sprints.filter((s: any) => !recentlyDeletedIds.current.has(s.id));
+            if (data.users) data.users = data.users.filter((u: any) => !recentlyDeletedIds.current.has(u.id));
 
             const remoteUsers = data.users || [];
             const hasAdmin = remoteUsers.some((u: User) => u.id === DEFAULT_ADMIN.id);
@@ -357,12 +355,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const updateExtra = (id: string, extra: Partial<Extra>) => { markLocalUpdate(); setState(s => ({ ...s, extras: s.extras.map(x => x.id === id ? { ...x, ...extra } : x) })); };
   const updateUser = (id: string, user: Partial<User>) => { markLocalUpdate(); setState(s => ({ ...s, users: s.users.map(x => x.id === id ? { ...x, ...user } : x) })); };
 
-  const deleteSprint = (id: string) => { markLocalUpdate(); setState(s => ({ ...s, sprints: s.sprints.filter(x => x.id !== id) })); };
-  const deleteDev = (id: string) => { markLocalUpdate(); setState(s => ({ ...s, devs: s.devs.filter(x => x.id !== id) })); };
-  const deleteCard = (id: string) => { markLocalUpdate(); setState(s => ({ ...s, cards: s.cards.filter(x => x.id !== id) })); };
-  const deleteQA = (id: string) => { markLocalUpdate(); setState(s => ({ ...s, qa: s.qa.filter(x => x.id !== id) })); };
-  const deleteExtra = (id: string) => { markLocalUpdate(); setState(s => ({ ...s, extras: s.extras.filter(x => x.id !== id) })); };
-  const deleteUser = (id: string) => { markLocalUpdate(); setState(s => ({ ...s, users: s.users.filter(x => x.id !== id) })); };
+  const deleteSprint = (id: string) => { markLocalUpdate(id); setState(s => ({ ...s, sprints: s.sprints.filter(x => x.id !== id) })); };
+  const deleteDev = (id: string) => { markLocalUpdate(id); setState(s => ({ ...s, devs: s.devs.filter(x => x.id !== id) })); };
+  const deleteCard = (id: string) => { markLocalUpdate(id); setState(s => ({ ...s, cards: s.cards.filter(x => x.id !== id) })); };
+  const deleteQA = (id: string) => { markLocalUpdate(id); setState(s => ({ ...s, qa: s.qa.filter(x => x.id !== id) })); };
+  const deleteExtra = (id: string) => { markLocalUpdate(id); setState(s => ({ ...s, extras: s.extras.filter(x => x.id !== id) })); };
+  const deleteUser = (id: string) => { markLocalUpdate(id); setState(s => ({ ...s, users: s.users.filter(x => x.id !== id) })); };
 
   const calculateResults = (): ResultRow[] => {
     const results: ResultRow[] = [];
