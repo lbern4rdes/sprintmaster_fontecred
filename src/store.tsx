@@ -136,6 +136,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const isFromPull = useRef<boolean>(false);
   const [isInitialPulling, setIsInitialPulling] = useState(true);
 
+  // Helper para marcar uma atualização local IMEDIATAMENTE
+  const markLocalUpdate = () => {
+    lastLocalUpdate.current = Date.now();
+  };
+
   useEffect(() => {
     // 1. Always save the config to a dedicated key so the URL is never lost
     localStorage.setItem('sprint_master_config', JSON.stringify(state.config));
@@ -148,7 +153,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // 3. Auto-sync to GAS if URL is configured
     // Only push if it's NOT the initial mount and NOT from a pull
     if (hasGasUrl && !isInitialMount.current && !isFromPull.current) {
-      lastLocalUpdate.current = Date.now(); // Marca que houve uma alteração local
+      // Aqui não marcamos mais o lastLocalUpdate, pois ele já foi marcado na função que disparou o setState
       const syncData = async () => {
         try {
           await fetch(state.config.gasUrl!, {
@@ -257,19 +262,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const logout = () => setCurrentUser(null);
 
-  const setConfig = (config: Config) => setState(s => ({ ...s, config }));
-  const setSprints = (sprints: Sprint[]) => setState(s => ({ ...s, sprints }));
-  const setDevs = (devs: Dev[]) => setState(s => ({ ...s, devs }));
-  const setCards = (cards: Card[]) => setState(s => ({ ...s, cards }));
-  const setQA = (qa: QA[]) => setState(s => ({ ...s, qa }));
-  const setExtras = (extras: Extra[]) => setState(s => ({ ...s, extras }));
-  const setUsers = (users: User[]) => setState(s => ({ ...s, users }));
+  const setConfig = (config: Config) => { markLocalUpdate(); setState(s => ({ ...s, config })); };
+  const setSprints = (sprints: Sprint[]) => { markLocalUpdate(); setState(s => ({ ...s, sprints })); };
+  const setDevs = (devs: Dev[]) => { markLocalUpdate(); setState(s => ({ ...s, devs })); };
+  const setCards = (cards: Card[]) => { markLocalUpdate(); setState(s => ({ ...s, cards })); };
+  const setQA = (qa: QA[]) => { markLocalUpdate(); setState(s => ({ ...s, qa })); };
+  const setExtras = (extras: Extra[]) => { markLocalUpdate(); setState(s => ({ ...s, extras })); };
+  const setUsers = (users: User[]) => { markLocalUpdate(); setState(s => ({ ...s, users })); };
 
   const generateId = () => Math.random().toString(36).substr(2, 9);
 
-  const addSprint = (sprint: Omit<Sprint, 'id'>) => setState(s => ({ ...s, sprints: [...s.sprints, { ...sprint, id: generateId() }] }));
-  const addDev = (dev: Omit<Dev, 'id'>) => setState(s => ({ ...s, devs: [...s.devs, { ...dev, id: generateId() }] }));
+  const addSprint = (sprint: Omit<Sprint, 'id'>) => { markLocalUpdate(); setState(s => ({ ...s, sprints: [...s.sprints, { ...sprint, id: generateId() }] })); };
+  const addDev = (dev: Omit<Dev, 'id'>) => { markLocalUpdate(); setState(s => ({ ...s, devs: [...s.devs, { ...dev, id: generateId() }] })); };
   const addCard = (card: Omit<Card, 'id'>) => {
+    markLocalUpdate();
     const defaultCode = `CRD-${(state.cards.length + 1).toString().padStart(3, '0')}`;
     const newCard = {
       ...card,
@@ -294,6 +300,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }));
   };
   const addQA = (qa: Omit<QA, 'id'>) => {
+    markLocalUpdate();
     const id = generateId();
     const newQA = { ...qa, id };
 
@@ -325,22 +332,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
       } : c)
     }));
   };
-  const addExtra = (extra: Omit<Extra, 'id'>) => setState(s => ({ ...s, extras: [...s.extras, { ...extra, id: generateId() }] }));
-  const addUser = (user: Omit<User, 'id'>) => setState(s => ({ ...s, users: [...s.users, { ...user, id: generateId() }] }));
+  const addExtra = (extra: Omit<Extra, 'id'>) => { markLocalUpdate(); setState(s => ({ ...s, extras: [...s.extras, { ...extra, id: generateId() }] })); };
+  const addUser = (user: Omit<User, 'id'>) => { markLocalUpdate(); setState(s => ({ ...s, users: [...s.users, { ...user, id: generateId() }] })); };
 
-  const updateSprint = (id: string, sprint: Partial<Sprint>) => setState(s => ({ ...s, sprints: s.sprints.map(x => x.id === id ? { ...x, ...sprint } : x) }));
-  const updateDev = (id: string, dev: Partial<Dev>) => setState(s => ({ ...s, devs: s.devs.map(x => x.id === id ? { ...x, ...dev } : x) }));
-  const updateCard = (id: string, card: Partial<Card>) => setState(s => ({ ...s, cards: s.cards.map(x => x.id === id ? { ...x, ...card } : x) }));
-  const updateQA = (id: string, qa: Partial<QA>) => setState(s => ({ ...s, qa: s.qa.map(x => x.id === id ? { ...x, ...qa } : x) }));
-  const updateExtra = (id: string, extra: Partial<Extra>) => setState(s => ({ ...s, extras: s.extras.map(x => x.id === id ? { ...x, ...extra } : x) }));
-  const updateUser = (id: string, user: Partial<User>) => setState(s => ({ ...s, users: s.users.map(x => x.id === id ? { ...x, ...user } : x) }));
+  const updateSprint = (id: string, sprint: Partial<Sprint>) => { markLocalUpdate(); setState(s => ({ ...s, sprints: s.sprints.map(x => x.id === id ? { ...x, ...sprint } : x) })); };
+  const updateDev = (id: string, dev: Partial<Dev>) => { markLocalUpdate(); setState(s => ({ ...s, devs: s.devs.map(x => x.id === id ? { ...x, ...dev } : x) })); };
+  const updateCard = (id: string, card: Partial<Card>) => { markLocalUpdate(); setState(s => ({ ...s, cards: s.cards.map(x => x.id === id ? { ...x, ...card } : x) })); };
+  const updateQA = (id: string, qa: Partial<QA>) => { markLocalUpdate(); setState(s => ({ ...s, qa: s.qa.map(x => x.id === id ? { ...x, ...qa } : x) })); };
+  const updateExtra = (id: string, extra: Partial<Extra>) => { markLocalUpdate(); setState(s => ({ ...s, extras: s.extras.map(x => x.id === id ? { ...x, ...extra } : x) })); };
+  const updateUser = (id: string, user: Partial<User>) => { markLocalUpdate(); setState(s => ({ ...s, users: s.users.map(x => x.id === id ? { ...x, ...user } : x) })); };
 
-  const deleteSprint = (id: string) => setState(s => ({ ...s, sprints: s.sprints.filter(x => x.id !== id) }));
-  const deleteDev = (id: string) => setState(s => ({ ...s, devs: s.devs.filter(x => x.id !== id) }));
-  const deleteCard = (id: string) => setState(s => ({ ...s, cards: s.cards.filter(x => x.id !== id) }));
-  const deleteQA = (id: string) => setState(s => ({ ...s, qa: s.qa.filter(x => x.id !== id) }));
-  const deleteExtra = (id: string) => setState(s => ({ ...s, extras: s.extras.filter(x => x.id !== id) }));
-  const deleteUser = (id: string) => setState(s => ({ ...s, users: s.users.filter(x => x.id !== id) }));
+  const deleteSprint = (id: string) => { markLocalUpdate(); setState(s => ({ ...s, sprints: s.sprints.filter(x => x.id !== id) })); };
+  const deleteDev = (id: string) => { markLocalUpdate(); setState(s => ({ ...s, devs: s.devs.filter(x => x.id !== id) })); };
+  const deleteCard = (id: string) => { markLocalUpdate(); setState(s => ({ ...s, cards: s.cards.filter(x => x.id !== id) })); };
+  const deleteQA = (id: string) => { markLocalUpdate(); setState(s => ({ ...s, qa: s.qa.filter(x => x.id !== id) })); };
+  const deleteExtra = (id: string) => { markLocalUpdate(); setState(s => ({ ...s, extras: s.extras.filter(x => x.id !== id) })); };
+  const deleteUser = (id: string) => { markLocalUpdate(); setState(s => ({ ...s, users: s.users.filter(x => x.id !== id) })); };
 
   const calculateResults = (): ResultRow[] => {
     const results: ResultRow[] = [];
