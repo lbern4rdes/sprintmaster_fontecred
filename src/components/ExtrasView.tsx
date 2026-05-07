@@ -190,7 +190,7 @@ export function ExtrasView() {
                 {isAdmin && (
                   <div className="flex gap-1">
                     <button onClick={() => startEdit(extra)} className="p-1.5 text-slate-300 hover:text-slate-900 transition-colors"><Edit2 className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => { if(confirm('Remover bonificação?')) deleteExtra(extra.id) }} className="p-1.5 text-slate-300 hover:text-red-600 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => deleteExtra(extra.id)} className="p-1.5 text-slate-300 hover:text-red-600 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                   </div>
                 )}
               </div>

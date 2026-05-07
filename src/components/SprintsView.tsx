@@ -173,7 +173,7 @@ export function SprintsView() {
                    <button onClick={() => startEdit(sprint)} className="p-1.5 text-slate-400 hover:text-slate-900 transition-colors">
                      <Edit2 className="w-4 h-4" />
                    </button>
-                   <button onClick={() => { if(confirm('Remover esta sprint e seus históricos?')) deleteSprint(sprint.id) }} className="p-1.5 text-slate-400 hover:text-red-600 transition-colors">
+                   <button onClick={() => deleteSprint(sprint.id)} className="p-1.5 text-slate-400 hover:text-red-600 transition-colors">
                      <Trash2 className="w-4 h-4" />
                    </button>
                  </div>

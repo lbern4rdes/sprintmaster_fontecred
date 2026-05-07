@@ -231,9 +231,7 @@ export function UsersView() {
                     <div className="flex justify-end gap-2">
                        {user.id !== 'admin_root' && (
                          <button 
-                          onClick={() => {
-                            if (confirm('Tem certeza que deseja excluir este usuário?')) deleteUser(user.id);
-                          }}
+                          onClick={() => deleteUser(user.id)}
                           className="p-2 text-slate-400 hover:text-rose-600 transition-colors"
                          >
                            <Trash2 className="w-4 h-4" />

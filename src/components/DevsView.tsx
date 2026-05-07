@@ -149,9 +149,7 @@ export function DevsView() {
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
                         <button 
-                          onClick={() => {
-                            if (confirm('Deseja remover este registro do quadro de desenvolvedores?')) deleteDev(dev.id);
-                          }}
+                          onClick={() => deleteDev(dev.id)}
                           className="p-2 text-slate-400 hover:text-red-600 transition-colors"
                         >
                           <Trash2 className="w-3.5 h-3.5" />

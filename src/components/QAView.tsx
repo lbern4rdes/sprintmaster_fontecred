@@ -273,7 +273,7 @@ export function QAView() {
                       <td className="px-6 py-4 text-right">
                         <div className="flex justify-end gap-1 px-2">
                           <button onClick={() => startEdit(item)} className="p-2 text-slate-400 hover:text-slate-900 transition-colors"><Edit2 className="w-3.5 h-3.5" /></button>
-                          <button onClick={() => { if(confirm('Remover registro de retorno?')) deleteQA(item.id) }} className="p-2 text-slate-400 hover:text-red-600 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                          <button onClick={() => deleteQA(item.id)} className="p-2 text-slate-400 hover:text-red-600 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                         </div>
                       </td>
                     )}
