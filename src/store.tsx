@@ -242,7 +242,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
 
   const login = (email: string, password: string) => {
-    const user = state.users.find(u => u.email === email && u.password === password && u.active);
+    const cleanedEmail = email.trim().toLowerCase();
+    const user = state.users.find(u => 
+      u.email.trim().toLowerCase() === cleanedEmail && 
+      u.password === password && 
+      u.active
+    );
     if (user) {
       setCurrentUser(user);
       return true;

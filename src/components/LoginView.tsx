@@ -9,7 +9,7 @@ import { LogIn, ShieldAlert } from 'lucide-react';
 import { motion } from 'motion/react';
 
 export function LoginView() {
-  const { login, isInitialPulling } = useApp();
+  const { login, isInitialPulling, users } = useApp();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(false);
@@ -70,10 +70,17 @@ export function LoginView() {
             />
           </div>
 
-          {isInitialPulling && !error && (
-            <div className="flex items-center justify-center gap-2 py-2">
-              <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
-              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Sincronizando base de usuários...</p>
+          {(isInitialPulling || users.length > 1) && !error && (
+            <div className="flex flex-col items-center justify-center gap-1 py-2">
+              <div className="flex items-center gap-2">
+                {isInitialPulling && <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />}
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
+                  {isInitialPulling ? 'Sincronizando usuários...' : 'Base de usuários atualizada'}
+                </p>
+              </div>
+              <p className="text-[9px] text-slate-600 font-medium">
+                {users.length} {users.length === 1 ? 'usuário carregado' : 'usuários carregados'}
+              </p>
             </div>
           )}
 
