@@ -124,7 +124,7 @@ function writeSheet(ss, sheetName, items) {
   
   const rows = items.map(item => headers.map(h => {
     const val = item[h];
-    return (typeof val === 'object') ? JSON.stringify(val) : val;
+    return (typeof val === 'object' && val !== null) ? JSON.stringify(val) : (val === undefined ? "" : val);
   }));
   
   sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
